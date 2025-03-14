@@ -1,0 +1,15 @@
+Build image with:
+	 'docker build -t <image_name>  --cpu-quota=100000 * <max_cores> --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) .
+	 
+Add your main to this folder.
+
+Add to the training cycle
+
+```python
+import os
+with open(os.path.join(os.path.dirname(__file__), "progress.txt")):
+    file.write(progress)
+```
+
+at the end of each training iteration, where progress is the amount of batches done.
+
