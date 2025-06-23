@@ -1,5 +1,6 @@
 import os
-from multiprocessing import Value, Manager
+import shutil
+from multiprocessing import Value, Event, Manager
 from typing import List
 import torch
 import time
@@ -9,6 +10,7 @@ import tempfile
 from torch.utils.data import DataLoader
 from torch import nn
 from core.SamplerUtils import DistributedSkipSampler
+from torchsnapshot import Snapshot
 
 from core.TrainingParams import TrainingParams
 
@@ -33,12 +35,13 @@ class _ParallelGPUMode:
     step: Value
     start_time: float
 
-    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_file: str, device_file: str, allocated_devices_file: str):
-        self.progress_file = progress_file
-        self.device_file = device_file
-        self.allocated_devices_file = allocated_devices_file
+    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_value: Value, progress_event: Event, allocate_gpus_num: Value, allocated_gpus_num: Value):
         self.allocations_timeline = allocations_timeline
         self.progress_timeline = progress_timeline
+        self.progress_value = progress_value
+        self.progress_event = progress_event
+        self.allocate_gpus_num = allocate_gpus_num
+        self.allocated_gpus_num = allocated_gpus_num
 
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available.")
@@ -67,36 +70,20 @@ class _ParallelGPUMode:
             raise TypeError("All devices must be a list of integers or torch.device")
 
     def _read_progress(self):
-        value = -1
-
-        while value < 0:
-            try:
-                with open(self.progress_file, "r") as file:
-                    value = int(file.readline())
-            except (ValueError, FileNotFoundError):
-                value = -1
-                time.sleep(0.1)
-
-        return value
+        with self.progress_value.get_lock():
+            return self.progress_value.value
 
     def _read_devices(self):
-        value = 0
-        while not isinstance(value, list):
-            try:
-                with open(self.device_file, "r") as file:
-                    value = ast.literal_eval(file.readline())
-            except (OSError, SyntaxError, ValueError):
-                value = 0
-                time.sleep(0.1)
-        return value
+        with self.allocate_gpus_num.get_lock():
+            value = self.allocate_gpus_num.value
+        return list(range(0, value))
 
     def start(self, epochs):
         pass
 
     def _write_allocation(self, new_gpus):
-
-        with open(self.allocated_devices_file, "w") as file:
-            file.write(str(new_gpus))
+        with self.allocated_gpus_num.get_lock():
+            self.allocated_gpus_num.value = len(new_gpus)
 
         alloc_time = time.monotonic()-self.start_time
         with open(self.allocations_timeline, "a+") as file:
@@ -109,10 +96,11 @@ class _ParallelGPUMode:
             file.write("0,0\n")
         with open(self.allocations_timeline, "w") as file:
             file.write("0," + str(len(self.devices)) + '\n')
-        with open(self.progress_file, "w") as file:
-            file.write("0")
-        with open(self.allocated_devices_file, "w") as file:
-                file.write(str(self.devices))
+        with self.progress_value.get_lock():
+            self.progress_value.value = 0
+        self.progress_event.set()
+        with self.allocated_gpus_num.get_lock():
+            self.allocated_gpus_num.value = len(self.devices)
 
     def _end_files(self, epochs):
         end = time.monotonic() - self.start_time
@@ -122,16 +110,15 @@ class _ParallelGPUMode:
             file.write(str(end) + ",0")
         with open(self.progress_timeline, "a+") as file:
             file.write(str(end) + "," + str(progress))
-        with open(self.progress_file, "w") as file:
-                file.write(str(progress+1))
-
-        os.remove(self.allocated_devices_file)
+        with self.progress_value.get_lock():
+            self.progress_value.value += 1
+        self.progress_event.set()
 
 
 class DataParallel(_ParallelGPUMode):
 
-    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_file, device_file, allocated_devices_file):
-        super().__init__(train_object, devices, progress_timeline, allocations_timeline, progress_file, device_file, allocated_devices_file)
+    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_value: Value, progress_event: Event, allocate_gpus_num: Value, allocated_gpus_num: Value):
+        super().__init__(train_object, devices, progress_timeline, allocations_timeline, progress_value, progress_event, allocate_gpus_num, allocated_gpus_num)
 
     def start(self, epochs):
 
@@ -216,8 +203,9 @@ class DataParallel(_ParallelGPUMode):
         self.step.value = min(self.step.value + len(self.devices), self.train_object.get_num_batches())
         progress = self.train_object.get_num_batches() * epoch + self.step.value
 
-        with open(self.progress_file, "w") as file:
-            file.write(str(progress))
+        with self.progress_value.get_lock():
+            self.progress_value.value = progress
+        self.progress_event.set()
         with open(self.progress_timeline, "a+") as file:
             file.write(str(time.monotonic() - self.start_time) + "," + str(progress) + '\n')
 
@@ -232,8 +220,8 @@ class DistributedDataParallel(_ParallelGPUMode):
     CHECKPOINT_PATH = tempfile.gettempdir() + "/model.checkpoint"
     TIMES: str
 
-    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_file: str, device_file: str, allocated_devices_file: str):
-        super().__init__(train_object, devices, progress_timeline, allocations_timeline, progress_file, device_file, allocated_devices_file)
+    def __init__(self, train_object, devices: List[torch.device] | List[int], progress_timeline: str, allocations_timeline: str, progress_value: Value, progress_event: Event, allocate_gpus_num: Value, allocated_gpus_num: Value):
+        super().__init__(train_object, devices, progress_timeline, allocations_timeline, progress_value, progress_event, allocate_gpus_num, allocated_gpus_num)
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '29500'
         self.update = Value('i', 0)
@@ -266,8 +254,6 @@ class DistributedDataParallel(_ParallelGPUMode):
 
             mp.spawn(self._wrap, nprocs=n_devices, args=(epochs, skip), join=True)
 
-            checkpoint = torch.load(self.CHECKPOINT_PATH)
-
             if self.update.value >= 1:
 
                 devices = self._read_devices()
@@ -276,16 +262,10 @@ class DistributedDataParallel(_ParallelGPUMode):
                     self.set_devices(devices)
                 self.update.value = 0
 
-                self.train_object.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
             skip = self.step.value * self.train_object.batch_size
 
-            self.train_object.model.load_state_dict(checkpoint['model_state_dict'])
-
-
-            os.remove(self.CHECKPOINT_PATH)
-
         self._end_files(epochs)
+        shutil.rmtree(self.CHECKPOINT_PATH)
 
         self._end_time()
 
@@ -300,6 +280,7 @@ class DistributedDataParallel(_ParallelGPUMode):
 
     def _wrap(self, rank, epochs, skip):
 
+        torch.cuda.set_device(rank)
         world_size = len(self.devices)
         dist.init_process_group(backend='nccl', world_size=world_size, rank=rank, init_method='env://')
 
@@ -313,7 +294,12 @@ class DistributedDataParallel(_ParallelGPUMode):
 
 
     def _train(self, rank, world_size, model, max_epochs, device, skip, loader):
-
+        app_state = {
+            "model": model
+        }
+        if os.path.exists(self.CHECKPOINT_PATH):
+            snapshot = Snapshot(path=self.CHECKPOINT_PATH)
+            snapshot.restore(app_state=app_state)
 
         for epoch in range(self.epoch_counter.value, max_epochs):
 
@@ -353,22 +339,20 @@ class DistributedDataParallel(_ParallelGPUMode):
             skip = 0
             if self.update.value >= 1:
                 break
-        if rank == 0:
-            self.save_state(model)
+        self.save_state(app_state)
 
 
 
 
-    def save_state(self, model):
-        torch.save({'model_state_dict': model.module.state_dict(),
-                    'optimizer_state_dict': self.train_object.optimizer.state_dict(), },
-                   self.CHECKPOINT_PATH)
+    def save_state(self, app_state):
+        Snapshot.take(path=self.CHECKPOINT_PATH, app_state=app_state)
 
     def _update_progress(self, epoch):
         progress = self.train_object.get_num_batches() * epoch + self.step.value
 
 
-        with open(self.progress_file, "w") as file:
-            file.write(str(progress))
+        with self.progress_value.get_lock():
+            self.progress_value.value = progress
+        self.progress_event.set()
         with open(self.progress_timeline, "a+") as file:
             file.write(str(time.monotonic() - self.start_time) + "," + str(progress) + '\n')

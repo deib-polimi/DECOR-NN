@@ -75,7 +75,7 @@ if __name__ == "__main__":
     batch_size= 32
 
     tot_data_samples = batch_size * num_batches
-    distributed = False
+    distributed = True
      #This is required to use DDP
     multiprocessing.set_start_method("spawn")
     if len(sys.argv) < 2:

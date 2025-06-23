@@ -51,7 +51,7 @@ def ddp_train(rank, world_size, model, loss_fn, optimizer, dataset, epochs, batc
     # create model and move it to GPU with id rank
     model = model.to(rank)
     device = torch.device(rank)
-    ddp_model = DP(model, device_ids=[rank])
+    ddp_model = DDP(model, device_ids=[rank])
     dist_sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False)
 
     loader = torch.utils.data.DataLoader(dataset=dataset,
