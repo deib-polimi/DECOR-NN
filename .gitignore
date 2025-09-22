@@ -1,0 +1,6 @@
+# Ignore all directories named 'results'
+cpu/results*/
+cpu/cli_results*/
+
+# Ignore pycache
+*/__pycache__/

@@ -1,181 +1,167 @@
 #! /usr/bin/env python3
 
-import logging
-import threading
-import subprocess
 import os
+import subprocess
+import math
 import multiprocessing as mp
 import time
-import math
-from multiprocessing import Value
+import threading
 
+# --- Constants ---
 T_SAMPLE_SECONDS = 1
 MIN_CORES = 1
 MAX_CORES = float(mp.cpu_count())
 K = 50
 TI_SECONDS = 12
-TOTAL_PROGRESS = 0
-start_time = 0
-deadline = 0
-csi_old = MAX_CORES
-cores = MAX_CORES
-container_name = 'container'
 CORE_QUANTUM = 0.05
 QUANTUM_DIGITS = -int(math.floor(math.log10(CORE_QUANTUM)))
-spike_percentage = 0.99
-results_dir = os.path.join(os.path.dirname(__file__), "results")
-PROGRESS_FILE = 0
-ALLOCATIONS_FILE = 0
-time_units = 0
-logger = logging.getLogger(__name__)
-PROGRESS_TIMELINE = 0
+SPIKE_PERCENTAGE = 0.99
+CPU_PERIOD = 100000
+IMAGE = 'test'
 
-
-def next_allocation(progress, set_point):
-    global csi_old
-
-    csp = K * (set_point - (progress / TOTAL_PROGRESS))
-    csi = csi_old + csp * (T_SAMPLE_SECONDS / TI_SECONDS)
+def next_allocation(progress, total_progress, set_point, job):
+    """
+    Calculates the next desired CPU core allocation for a job.
+    """
+    csp = K * (set_point - (progress / total_progress))
+    csi = job.csi_old + csp * (T_SAMPLE_SECONDS / TI_SECONDS)
     cs = min(max(MIN_CORES, csp + csi), MAX_CORES)
 
-    # Originally cs = min(max(MIN_CORES, csp+csi), (TOTAL_PROGRESS-progress), MAX_CORES)
-
-    csi_old = cs - csp
-    cs = round(round(cs / CORE_QUANTUM) * CORE_QUANTUM, QUANTUM_DIGITS)
-    return cs
-
-
-def update(progress):
-    global time_units
-    global cores
-
-    time_units += T_SAMPLE_SECONDS
-    set_point = time_units / deadline
-
+    #cs = round(round(cs / CORE_QUANTUM) * CORE_QUANTUM, QUANTUM_DIGITS)
+    # We round later to increase precision and avoid rounding twice
+    cs = (cs / CORE_QUANTUM) * CORE_QUANTUM
+   
     if set_point >= 1.0:
-        next_core = cores
-        if progress / TOTAL_PROGRESS < spike_percentage:
-            next_core = MAX_CORES
-    else:
-        next_core = next_allocation(progress, set_point)
+        cs = job.current_cores
+        if progress / total_progress < SPIKE_PERCENTAGE:
+            return MAX_CORES, csp
 
-    if next_core != cores:
-        old_core = cores
-        cores = next_core
+    return cs, csp
 
+
+def update(desired, scaling_factor, job):
+    actual_cores = desired * scaling_factor
+    # Round the final allocation
+    job.csi_old = actual_cores - job.csp
+    
+    quantized_cores = round(actual_cores , QUANTUM_DIGITS)
+    final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
+
+    if final_cores != job.current_cores:
         try:
-            cpu_period = 100000
-            subprocess.run('docker update --cpu-quota="' + str(int(cores * cpu_period)) + '" ' + container_name,
-                           check=True,
-                           shell=True, capture_output=True)
-
-            alloc_time = time.time() - start_time
-            with open(ALLOCATIONS_FILE, "a+") as file:
-                file.write(str(alloc_time) + "," + str(old_core) + "\n")
-                file.write(str(alloc_time) + "," + str(cores) + "\n")
+            cpu_quota = int(final_cores * CPU_PERIOD)
+            subprocess.run(f'docker update --cpu-quota="{cpu_quota}" {job.container_name}',
+                            shell=True, check=True, capture_output=True)
+            
+            alloc_time = time.time() - job.start_time
+            with open(job.allocations_file, "a") as f:
+                f.write(f"{alloc_time},{job.current_cores}\n") #is it needed? In the .csv the prev file tells the amount of cores allocated
+                f.write(f"{alloc_time},{final_cores}\n")
+            
+            job.current_cores = final_cores
         except subprocess.CalledProcessError as e:
-            print(f"Error in updating! Error is {e.output} {e.cmd} {e.returncode}")
-
-    return
+            print(f"[{job.container_name}] Error updating CPU quota: {e.stderr.decode()}")
 
 
-def read_progress():
-    value = -1
-    while value < 0:
-        try:
-            with open(PROGRESS_FILE, "r") as file:
-                value = int(file.readline())
-        except (ValueError, FileNotFoundError):
-            value = -1
-            time.sleep(0.1)
-
-    return value
-
-
-def schedule(is_done):
-    timer = threading.Timer(T_SAMPLE_SECONDS, schedule, (is_done,))
-    timer.start()
-    progress = read_progress()
-    updated_progress_time = time.time() - start_time
-
-    if progress != TOTAL_PROGRESS:
-        update(progress)
-    else:
-        timer.cancel()
-        alloc_time = time.time() - start_time
-        with open(ALLOCATIONS_FILE, "a+") as file:
-            file.write(str(alloc_time) + "," + str(cores) + "\n")
-            file.write(str(alloc_time) + "," + str(0) + "\n")
-        is_done.value = 1
-        return
-    with open(PROGRESS_TIMELINE, "a+") as file:
-        file.write(str(updated_progress_time) + "," + str(progress) + "\n")
-
-
-def start(model: str, num_batches: int, batch_size: int, desired_deadline: float, alpha: float,
-          epochs: int, allocations_timeline: str, progress_timeline: str, image_name: str, dl_change=False,
-          progress_file=None):
-    global ALLOCATIONS_FILE
-    global PROGRESS_FILE
-    global PROGRESS_TIMELINE
-    global start_time
-    global TOTAL_PROGRESS
-    global deadline
-    global csi_old
-    global cores
-    global time_units
-
-    time_units = 0
-    TOTAL_PROGRESS = epochs * num_batches
-    deadline = desired_deadline * alpha
-    csi_old = MAX_CORES
-    cores = MAX_CORES
-    is_done = Value('i', 0)
-    ALLOCATIONS_FILE = allocations_timeline
-    PROGRESS_TIMELINE = progress_timeline
-    if progress_file is not None:
-        filename = progress_file
-    else:
-        filename = "progress.txt"
-    PROGRESS_FILE = os.path.join(results_dir, filename)
+def read_progress(job):
+    """Reads the progress from the job's progress file."""
     try:
-        print(f"Running Docker.")
-        subprocess.run('docker run -d -v $(pwd)/results:/project/results --name='
-                       + container_name + ' ' + image_name + ' ' + model + ' '
-                       + str(num_batches) + ' ' + str(epochs) + ' ' + str(batch_size) + ' ' + filename,
-                       shell=True, check=True, capture_output=True)
+        with open(job.progress_file, "r") as file:
+            return int(file.readline())
+    except (ValueError, FileNotFoundError):
+        return -1 # Indicates not started or file not ready
 
-    except subprocess.CalledProcessError:
-        print(f"Error during docker opening \n")
-        subprocess.run(' docker rm -vf $(docker ps -aq)', shell=True)
-        return
 
-    with open(ALLOCATIONS_FILE, "a+") as file:
-        file.write("0," + str(MAX_CORES) + "\n")
-    with open(PROGRESS_TIMELINE, "a+") as file:
-        file.write("0,0\n")
-    # Training starts when multi_gpu creates a file with progress 0.
-    read_progress()
-    print(f"Starting Deadline Control at deadline {desired_deadline}s with alpha = {alpha}.")
-    start_time = time.time()
-    schedule(is_done)
-    time.sleep(T_SAMPLE_SECONDS)
-
-    # This section can be removed after the dynamic change is moved outside this module.
-    # This is due to the fact that scheduling is already done by the schedule() function.
-    while not bool(is_done.value):
+def schedule(self):
+    """The heart of the controller. Manages CPU for all jobs."""
+    while self.scheduler_active:
         time.sleep(T_SAMPLE_SECONDS)
-        # Dynamically change deadline. After prototyping this should be moved outside controller.
-        if time_units / deadline >= 0.3 and dl_change:
-            deadline = desired_deadline * 0.8
-            print(f"deadline changed to {deadline}\n")
-            break
-    if dl_change:
-        while not bool(is_done.value):
-            time.sleep(T_SAMPLE_SECONDS)
-    end = time.time() - start_time
+        
+        with self.jobs_lock:
+            active_jobs = [job for job in self.jobs if not job.is_done]
+            if not active_jobs:
+                continue
 
-    os.remove(PROGRESS_FILE)
-    subprocess.run(' docker rm -f ' + container_name, shell=True, stdout=subprocess.DEVNULL)
-    print(f"Finished Training at time {end}")
-    return end
+            # 1. Calculate desired cores for each job
+            desired_allocations = {}
+            total_desired_cores = 0
+            
+            for job in active_jobs:
+                progress = read_progress(job)
+
+                if progress == -1 and job.start_time is None:
+                    continue # Job hasn't created its progress file yet
+                
+                if job.start_time is None: # First time
+                    job.start_time = time.time()
+
+                # Check for completion
+                if progress >= job.total_progress:
+                    job.is_done = True
+                    end_time = time.time() 
+                    tot_time = end_time - job.start_time
+                    print(f"[{job.container_name}] Finished Training in {tot_time:.2f}s at {end_time:.2f}s")
+                    with open(job.allocations_file, "a") as f:
+                        f.write(f"{tot_time},{job.current_cores}\n")
+                        f.write(f"{tot_time},0\n")
+                    job.stop()
+                    continue
+
+                # Update job timeline
+                elapsed_time = time.time() - job.start_time
+                with open(job.progress_timeline_file, "a") as f:
+                    f.write(f"{elapsed_time},{progress}\n")
+
+                #Dynamically change deadline
+                if job.time_units / job.deadline >= 0.3 and job.dynamic_dl and not job.dl_changed:
+                    job.deadline = job.desired_deadline * 0.8
+                    print(f"[{job.container_name}] Deadline changed to {job.deadline}\n")
+                    job.dl_changed = True
+
+                #Desired allocation
+                job.time_units = time.time() - job.start_time 
+                set_point = job.time_units / job.deadline
+                desired_cores, csp = next_allocation(progress, job.total_progress, set_point, job)
+                job.csp = csp
+
+                desired_allocations[job.id] = desired_cores
+                total_desired_cores += desired_cores
+
+            # 2. Calculate proportional allocation
+            scaling_factor = 1.0
+            if total_desired_cores > MAX_CORES:
+                scaling_factor = MAX_CORES / total_desired_cores
+            
+            # 3. Apply the new allocations
+            for job in active_jobs:
+                if job.id not in desired_allocations:
+                    continue
+
+                update(desired_allocations[job.id], scaling_factor, job)
+
+            # Clean up finished jobs from the main list
+            self.jobs = [job for job in self.jobs if not job.is_done]
+
+
+def start(model: str, num_batches: int, batch_size: int, epochs: int, 
+          container_name: str, progress_file_path: str, image_name: str):
+    """
+    Launches the Docker container for a single training job.
+    It no longer manages the lifecycle or scheduling.
+    """
+    progress_dir = os.path.dirname(progress_file_path)
+    progress_filename = os.path.basename(progress_file_path)
+
+    try:
+        docker_command = (
+            f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
+            f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
+            f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
+        )
+        subprocess.run(docker_command, shell=True, check=True, capture_output=True)
+
+    except subprocess.CalledProcessError as e:
+        print(f"[{container_name}] Error during Docker container startup: {e.stderr.decode()}")
+        raise
+
+    return container_name

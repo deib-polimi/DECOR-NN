@@ -14,6 +14,9 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 import time
 
+torch.manual_seed(42)
+random.seed(42)
+torch.set_num_threads(8)
 
 class RandomDataset(Dataset):
     def __init__(self, values, labels):
@@ -90,3 +93,4 @@ if __name__ == "__main__":
     batch_size = int(sys.argv[4])
     progress_file = os.path.join(os.path.dirname(__file__), "results", sys.argv[5])
     time = cpu_training(model, num_batches, epochs, batch_size, progress_file)
+    print(time)
