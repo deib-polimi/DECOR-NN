@@ -41,6 +41,7 @@ def docker_image():
     try:
         docker_command = (
     f'docker run --rm -v {progress_dir}:/project/results --name={job_id} '
+    f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
     f'{IMAGE} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
 )
         result = subprocess.run(docker_command, shell=True, check=True, capture_output=True)
