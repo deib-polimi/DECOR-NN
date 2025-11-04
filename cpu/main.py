@@ -16,7 +16,6 @@ import time
 
 torch.manual_seed(42)
 random.seed(42)
-torch.set_num_threads(8)
 
 class RandomDataset(Dataset):
     def __init__(self, values, labels):
