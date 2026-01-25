@@ -10,7 +10,7 @@ import threading
 # --- Constants ---
 T_SAMPLE_SECONDS = 1
 MIN_CORES = 1
-MAX_CORES = float(mp.cpu_count()) - 2
+MACHINE_CORES = float(mp.cpu_count())
 K = 50
 TI_SECONDS = 12
 CORE_QUANTUM = 0.05
@@ -18,7 +18,9 @@ QUANTUM_DIGITS = -int(math.floor(math.log10(CORE_QUANTUM)))
 SPIKE_PERCENTAGE = 0.99
 CPU_PERIOD = 100000
 IMAGE = 'test'
-INITIAL_STARTING_CORE = 2
+STARTING_CORE = 2
+ENDING_CORE = MACHINE_CORES - 1
+MAX_CORES = ENDING_CORE - STARTING_CORE + 1
 
 def next_allocation(progress, total_progress, set_point, job):
     """
@@ -40,7 +42,7 @@ def next_allocation(progress, total_progress, set_point, job):
     return cs, csp
 
 
-def update(desired, scaling_factor, job, start, total_allocated):
+def update(desired, scaling_factor, job):
     actual_cores = desired * scaling_factor
     # Round the final allocation
     job.csi_old = actual_cores - job.csp
@@ -49,10 +51,8 @@ def update(desired, scaling_factor, job, start, total_allocated):
     final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
 
     cpu_quota = int(final_cores * CPU_PERIOD)
-    end = start + final_cores - 1
-    total_allocated += final_cores
 
-    subprocess.run(f'docker update --cpu-quota="{cpu_quota}" --cpuset-cpus="{int(start)}-{int(end)}" {job.container_name}',
+    subprocess.run(f'docker update --cpu-quota="{cpu_quota}" {job.container_name}',
                     shell=True, check=True, capture_output=True)
 
     if final_cores != job.current_cores:
@@ -67,10 +67,6 @@ def update(desired, scaling_factor, job, start, total_allocated):
         except subprocess.CalledProcessError as e:
             print(f"[{job.container_name}] Error updating CPU quota: {e.stderr.decode()}")
 
-
-    if total_allocated < (end - 1):
-        return end, total_allocated
-    return end + 1, total_allocated
 
 def read_progress(job):
     """Reads the progress from the job's progress file."""
@@ -142,13 +138,13 @@ def schedule(self):
                 scaling_factor = MAX_CORES / total_desired_cores
             
             # 3. Apply the new allocations
-            start = INITIAL_STARTING_CORE
+            start = STARTING_CORE
             total_allocated = 0
             for job in active_jobs:
                 if job.id not in desired_allocations:
                     continue
-
-                start, total_allocated = update(desired_allocations[job.id], scaling_factor, job, start, total_allocated)
+                else:
+                    update(desired_allocations[job.id], scaling_factor, job)
 
             # Clean up finished jobs from the main list
             self.jobs = [job for job in self.jobs if not job.is_done]
@@ -167,7 +163,7 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
             f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
-            f'--cpuset-cpus="2-{int(MAX_CORES + 1)}" '
+            f'--cpuset-cpus="{int(STARTING_CORE)}-{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)
