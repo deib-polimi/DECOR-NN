@@ -138,8 +138,6 @@ def schedule(self):
                 scaling_factor = MAX_CORES / total_desired_cores
             
             # 3. Apply the new allocations
-            start = STARTING_CORE
-            total_allocated = 0
             for job in active_jobs:
                 if job.id not in desired_allocations:
                     continue

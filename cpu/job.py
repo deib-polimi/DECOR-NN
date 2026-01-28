@@ -30,6 +30,7 @@ class TrainingJob:
         os.makedirs(self.run_path, exist_ok=True)
         # Write initial allocation
         with open(self.allocations_file, "w") as f:
+            f.write(str(time.monotonic()) + "\n")
             f.write("time,cores\n0," + str(self.current_cores) + "\n")
         with open(self.progress_timeline_file, "w") as f:
             f.write("time,progress\n0,0\n")

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class Shell(cmd.Cmd):
-    def __init__(self):
+    def __init__(self, results_path=None):
         super().__init__()
         self.prompt = ">>> "
         self.intro = "Welcome to DECORN-NN shell. Type 'help' to see the commands."
@@ -28,7 +28,7 @@ class Shell(cmd.Cmd):
         base_results_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "cli_results")
         #timestamp format: 2025-09-05_14-30-45
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.results_path = os.path.join(base_results_path, timestamp)
+        self.results_path = results_path or os.path.join(base_results_path, timestamp)
         os.makedirs(self.results_path, exist_ok=True)
         
         self.jobs: List[TrainingJob] = []
