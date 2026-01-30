@@ -12,6 +12,7 @@ from controller import T_SAMPLE_SECONDS, read_progress, schedule
 import random
 from scheduler import *
 
+DIRECTORY_NAME = ""
 SEED = 4
 random.seed(SEED)
 
@@ -55,14 +56,14 @@ def launch_jobs():
     launcher_sequence = job_laucher_generator()
 
     BASELINE_MEAN = 0
-    # 1. ciclio for per calcolare le baseline 
+    shell = Shell(DIRECTORY_NAME + "/baseline")
+    # 1. ciclo for per calcolare le baseline 
     for i, config in enumerate(job_configs):
-        shell = Shell("baseline")
         shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
         shell.scheduler_thread.start()
         try:
-            job_id = f"baseline_job_{config['model']}_{str(uuid.uuid4().hex[:8])}"
-            run_path = os.path.join(shell.results_path, f"run_baseline_{job_id}")
+            job_id = f"{config['model']}_{str(uuid.uuid4().hex[:8])}"
+            run_path = os.path.join(shell.results_path, f"{job_id}")
             args = type("Args", (object,), config)
 
             job = TrainingJob(job_id, run_path, args)
@@ -70,11 +71,26 @@ def launch_jobs():
                 job.launch()
                 shell.jobs.append(job)
                 print(f"Successfully launched job {job.id} with container {job.container_name}.")
-                while(job.read_progress() <= job.total_progress):
-                    time.sleep(10)
+                job.start_time = time.time()
+                while(job.read_progress() < job.total_progress):
+                    time.sleep(3)
+                progress = job.read_progress()
+                job.is_done = True
+                end_time = time.time() 
+                tot_time = end_time - job.start_time
+                print(f"[{job.container_name}] Finished Training in {tot_time:.2f}s at {end_time:.2f}s")
+                with open(job.allocations_file, "a") as f:
+                    f.write(f"{tot_time},{job.current_cores}\n")
+                    f.write(f"{tot_time},0\n")
+                job.stop()
+
+                elapsed_time = time.time() - job.start_time
+                with open(job.progress_timeline_file, "a") as f:
+                    f.write(f"{elapsed_time},{progress}\n")
+                
                 # Aggiornare deadline di job_configs con le nuove baseline calcolate
-                job_configs[i]['desired_deadline'] = job.tot_time * 2
-                BASELINE_MEAN += job.tot_time
+                job_configs[i]['desired_deadline'] = tot_time * 2
+                BASELINE_MEAN += tot_time
         except Exception as e:
             print(f"Failed to launch job {job_id}. Error: {e}")    
     shell.scheduler_thread.join(timeout=2)
@@ -83,13 +99,13 @@ def launch_jobs():
     
     
     # 2. ciclo for per lanciare job con schedule ()
-    shell = Shell("scheduled")
+    shell = Shell(DIRECTORY_NAME + "/scheduled")
     shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
     shell.scheduler_thread.start()
     for i, config_index in enumerate(launcher_sequence):
         if(config_index < 3):
             try:
-                job_id = f"scheduled_job_{job_configs[config_index]['model']}_{i}_{str(uuid.uuid4().hex[:8])}"
+                job_id = f"scheduled_job_{i}_{job_configs[config_index]['model']}_{str(uuid.uuid4().hex[:8])}"
                 run_path = os.path.join(shell.results_path, f"run_scheduled_{job_id}")
                 args = type("Args", (object,), job_configs[config_index])
 
@@ -109,4 +125,5 @@ def launch_jobs():
     print("Done!\n")
 
 if __name__ == "__main__":
+    DIRECTORY_NAME = "esperimento"
     launch_jobs()

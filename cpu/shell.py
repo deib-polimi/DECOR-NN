@@ -20,17 +20,23 @@ logger = logging.getLogger(__name__)
 
 
 class Shell(cmd.Cmd):
-    def __init__(self, results_path=None):
+    def __init__(self, args_path=None):
         super().__init__()
         self.prompt = ">>> "
         self.intro = "Welcome to DECORN-NN shell. Type 'help' to see the commands."
-        
-        base_results_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "cli_results")
-        #timestamp format: 2025-09-05_14-30-45
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.results_path = results_path or os.path.join(base_results_path, timestamp)
-        os.makedirs(self.results_path, exist_ok=True)
-        
+
+        if args_path is None:
+            base_results_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "cli_results")
+            #timestamp format: 2025-09-05_14-30-45
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            self.results_path = os.path.join(base_results_path, timestamp)
+            os.makedirs(self.results_path, exist_ok=True)
+        else:
+            base_results_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), args_path)
+            self.results_path = base_results_path
+            os.makedirs(base_results_path, exist_ok=False) #throw error if exists
+
+
         self.jobs: List[TrainingJob] = []
         self.jobs_lock = threading.Lock()
         self._build_docker_image()
