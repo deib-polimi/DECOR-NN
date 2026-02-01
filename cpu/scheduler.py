@@ -8,6 +8,7 @@ def schedule_edf():
     pass
 
 def schedule_proportional(shell):
+    global LAST_CORE_ALLOCATION
     while shell.scheduler_active:
         time.sleep(T_SAMPLE_SECONDS)
         

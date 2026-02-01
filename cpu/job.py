@@ -60,6 +60,4 @@ class TrainingJob:
         """Stops and removes the container and cleans up files."""
         #print(f"[{self.container_name}] Stopping and cleaning up...")
         subprocess.run(f'docker rm -f {self.container_name}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if os.path.exists(self.progress_file):
-            os.remove(self.progress_file)
 

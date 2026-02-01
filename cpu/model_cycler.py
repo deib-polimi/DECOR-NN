@@ -46,7 +46,7 @@ def job_laucher_generator(range_val):
 def launcher(shell, launcher_sequence, name):
     global BASELINE_MEAN
     for i, config_index in enumerate(launcher_sequence):
-        if(config_index < 3):
+        if(config_index < len(job_configs)):
             try:
                 job_id = f"{name}_job_{i}_{job_configs[config_index]['model']}_{str(uuid.uuid4().hex[:8])}"
                 run_path = os.path.join(shell.results_path, f"run_{name}_{job_id}")
