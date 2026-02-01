@@ -49,10 +49,11 @@ job_configs = [
     }        
 ]
 
-def job_laucher_generator():
-    return [random.randint(0, 3) for _ in range(14)]
+def job_laucher_generator(range_val):
+    return [random.randint(0, 3) for _ in range(range_val)]
         
 def launcher(shell, launcher_sequence, name):
+    global BASELINE_MEAN
     for i, config_index in enumerate(launcher_sequence):
         if(config_index < 3):
             try:
@@ -71,8 +72,10 @@ def launcher(shell, launcher_sequence, name):
         time.sleep(BASELINE_MEAN * 0.25)
 
 def launch_jobs(launcher_sequence):
-    shell = Shell(DIRECTORY_NAME + "/baseline")
+    global BASELINE_MEAN
+
     # 1. ciclo for per calcolare le baseline 
+    shell = Shell(DIRECTORY_NAME + "/baseline")
     for i, config in enumerate(job_configs):
         shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
         shell.scheduler_thread.start()
@@ -146,5 +149,5 @@ def launch_jobs(launcher_sequence):
 
 if __name__ == "__main__":
     DIRECTORY_NAME = "esperimento"
-    launcher_sequence = job_laucher_generator()
+    launcher_sequence = job_laucher_generator(14)
     launch_jobs(launcher_sequence)
