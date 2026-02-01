@@ -56,9 +56,8 @@ def update(desired, scaling_factor, job):
                     shell=True, check=True, capture_output=True)
 
     if final_cores != job.current_cores:
-        try:
-            
-            alloc_time = time.time() - job.start_time
+        try: 
+            alloc_time = time.monotonic() - job.start_time
             with open(job.allocations_file, "a") as f:
                 f.write(f"{alloc_time},{job.current_cores}\n") #is it needed? In the .csv the prev file tells the amount of cores allocated
                 f.write(f"{alloc_time},{final_cores}\n")
@@ -98,22 +97,22 @@ def schedule(shell):
                     continue # Job hasn't created its progress file yet
                 
                 if job.start_time is None: # First time
-                    job.start_time = time.time()
+                    job.start_time = time.monotonic()
 
                 # Check for completion
                 if progress >= job.total_progress:
                     job.is_done = True
-                    end_time = time.time() 
-                    tot_time = end_time - job.start_time
-                    print(f"[{job.container_name}] Finished Training in {tot_time:.2f}s at {end_time:.2f}s")
+                    end_time = time.monotonic() 
+                    job.tot_time = end_time - job.start_time
+                    print(f"[{job.container_name}] Finished Training in {job.tot_time:.2f}s at {end_time:.2f}s")
                     with open(job.allocations_file, "a") as f:
-                        f.write(f"{tot_time},{job.current_cores}\n")
-                        f.write(f"{tot_time},0\n")
+                        f.write(f"{job.tot_time},{job.current_cores}\n")
+                        f.write(f"{job.tot_time},0\n")
                     job.stop()
                     continue
 
                 # Update job timeline
-                elapsed_time = time.time() - job.start_time
+                elapsed_time = time.monotonic() - job.start_time
                 with open(job.progress_timeline_file, "a") as f:
                     f.write(f"{elapsed_time},{progress}\n")
 
@@ -124,7 +123,7 @@ def schedule(shell):
                     job.dl_changed = True
 
                 #Desired allocation
-                job.time_units = time.time() - job.start_time 
+                job.time_units = time.monotonic() - job.start_time 
                 set_point = job.time_units / job.deadline
                 desired_cores, csp = next_allocation(progress, job.total_progress, set_point, job)
                 job.csp = csp

@@ -12,6 +12,24 @@ def schedule_proportional(shell):
         time.sleep(T_SAMPLE_SECONDS)
         
         with shell.jobs_lock:
+            # Rimuovere job terminati
+            for job in shell.jobs:
+                progress = job.read_progress()
+                if progress >= job.total_progress:
+                    job.is_done = True
+                    end_time = time.monotonic() 
+                    job.tot_time = end_time - job.start_time
+                    print(f"[{job.container_name}] Finished Training in {job.tot_time:.2f}s at {end_time:.2f}s")
+                    with open(job.allocations_file, "a") as f:
+                        f.write(f"{job.tot_time},{job.current_cores}\n")
+                        f.write(f"{job.tot_time},0\n")
+                    job.stop()
+                else:
+                    if progress == -1 and job.start_time is None:
+                        continue
+                    if job.start_time is None: # First time
+                        job.start_time = time.monotonic()
+
             shell.jobs = [job for job in shell.jobs if not job.is_done]
 
             if not shell.jobs:
@@ -28,7 +46,12 @@ def schedule_proportional(shell):
 
             if cores_per_job != LAST_CORE_ALLOCATION:
                 LAST_CORE_ALLOCATION = cores_per_job
+                now = time.monotonic() 
                 for job in shell.jobs:
                     print(f"Current allocation: {LAST_CORE_ALLOCATION}")
                     subprocess.run(f'docker update --cpu-quota="{cpu_quota}" {job.container_name}',
                     shell=True, check=True, capture_output=True)
+                    with open(job.allocations_file, "a") as f:
+                        f.write(f"{now-job.start_time},{job.current_cores}\n")
+                        f.write(f"{now-job.start_time},{cores_per_job}\n")
+                    job.current_cores = cores_per_job

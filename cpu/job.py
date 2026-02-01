@@ -24,6 +24,7 @@ class TrainingJob:
         self.current_cores = MAX_CORES
         self.csi_old = MAX_CORES
         self.csp = 0
+        self.tot_time = 0
 
     def launch(self):
         """Launches the Docker container for this job."""
@@ -32,8 +33,10 @@ class TrainingJob:
         with open(self.allocations_file, "w") as f:
             f.write(str(time.monotonic()) + "\n")
             f.write("time,cores\n0," + str(self.current_cores) + "\n")
+            f.write(f"{self.args.model},{self.args.num_batches},{self.args.epochs},{self.args.batch_size},{self.args.desired_deadline}\n")
         with open(self.progress_timeline_file, "w") as f:
             f.write("time,progress\n0,0\n")
+            f.write(f"{self.args.model},{self.args.num_batches},{self.args.epochs},{self.args.batch_size},{self.args.desired_deadline}\n")
 
         start(
             model=self.args.model,

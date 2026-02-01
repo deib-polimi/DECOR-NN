@@ -37,20 +37,11 @@ job_configs = [
         "alpha": 1.0,
         "epochs": 2,
         "dl_change": False
-    },
-    {
-        "model": "inception_v3",
-        "num_batches": 100,
-        "batch_size": 32,
-        "desired_deadline": 0.1,
-        "alpha": 1.0,
-        "epochs": 2,
-        "dl_change": False
-    }        
+    }
 ]
 
 def job_laucher_generator(range_val):
-    return [random.randint(0, 3) for _ in range(range_val)]
+    return [random.randint(0, len(job_configs)) for _ in range(range_val)]
         
 def launcher(shell, launcher_sequence, name):
     global BASELINE_MEAN
@@ -85,36 +76,22 @@ def launch_jobs(launcher_sequence):
             args = type("Args", (object,), config)
 
             job = TrainingJob(job_id, run_path, args)
-            with shell.jobs_lock:
-                job.launch()
-                shell.jobs.append(job)
-                print(f"Successfully launched job {job.id} with container {job.container_name}.")
-                job.start_time = time.time()
-                while(job.read_progress() < job.total_progress):
-                    time.sleep(3)
-                progress = job.read_progress()
-                job.is_done = True
-                end_time = time.time() 
-                tot_time = end_time - job.start_time
-                print(f"[{job.container_name}] Finished Training in {tot_time:.2f}s at {end_time:.2f}s")
-                with open(job.allocations_file, "a") as f:
-                    f.write(f"{tot_time},{job.current_cores}\n")
-                    f.write(f"{tot_time},0\n")
-                job.stop()
-
-                elapsed_time = time.time() - job.start_time
-                with open(job.progress_timeline_file, "a") as f:
-                    f.write(f"{elapsed_time},{progress}\n")
+            job.launch()
+            shell.jobs.append(job)
+            print(f"Successfully launched job {job.id} with container {job.container_name}.")
+            job.start_time = time.monotonic()
+            while(job.read_progress() < job.total_progress):
+                time.sleep(3)
                 
-                # Aggiornare deadline di job_configs con le nuove baseline calcolate
-                job_configs[i]['desired_deadline'] = tot_time * 2
-                BASELINE_MEAN += tot_time
+            # Aggiornare deadline di job_configs con le nuove baseline calcolate
+            job_configs[i]['desired_deadline'] = job.tot_time * 2
+            BASELINE_MEAN += job.tot_time
         except Exception as e:
             print(f"Error: {e}")
             traceback.print_exc()
     shell.scheduler_thread.join(timeout=2)
     
-    BASELINE_MEAN /= 3
+    BASELINE_MEAN /= len(job_configs)
     
     
     # 2. ciclo for per lanciare job con schedule ()
