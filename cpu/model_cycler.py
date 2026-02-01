@@ -6,56 +6,71 @@ To use this script, comment the following line in cpu/shell.py:
 import os
 import threading
 import time
+import traceback
 import uuid
 from shell import Shell, TrainingJob
 from controller import T_SAMPLE_SECONDS, read_progress, schedule
 import random
 from scheduler import *
 
+BASELINE_MEAN = 0.0
 DIRECTORY_NAME = ""
 SEED = 4
 random.seed(SEED)
 
+# Define the training jobs to launch
+job_configs = [
+    {
+        "model": "resnet50",
+        "num_batches": 100,
+        "batch_size": 32,
+        "desired_deadline": 0.1,
+        "alpha": 1.0,
+        "epochs": 2,
+        "dl_change": False
+    },
+    {
+        "model": "vgg19",
+        "num_batches": 100,
+        "batch_size": 32,
+        "desired_deadline": 0.1,
+        "alpha": 1.0,
+        "epochs": 2,
+        "dl_change": False
+    },
+    {
+        "model": "inception_v3",
+        "num_batches": 100,
+        "batch_size": 32,
+        "desired_deadline": 0.1,
+        "alpha": 1.0,
+        "epochs": 2,
+        "dl_change": False
+    }        
+]
+
 def job_laucher_generator():
     return [random.randint(0, 3) for _ in range(14)]
         
+def launcher(shell, launcher_sequence, name):
+    for i, config_index in enumerate(launcher_sequence):
+        if(config_index < 3):
+            try:
+                job_id = f"{name}_job_{i}_{job_configs[config_index]['model']}_{str(uuid.uuid4().hex[:8])}"
+                run_path = os.path.join(shell.results_path, f"run_{name}_{job_id}")
+                args = type("Args", (object,), job_configs[config_index])
 
-def launch_jobs():
+                job = TrainingJob(job_id, run_path, args)
+                with shell.jobs_lock:
+                    job.launch()
+                    shell.jobs.append(job)
+                    print(f"Successfully launched job {job.id} with container {job.container_name}.")
+            except Exception as e:
+                print(f"Error: {e}")
+                traceback.print_exc()
+        time.sleep(BASELINE_MEAN * 0.25)
 
-    # Define the training jobs to launch
-    job_configs = [
-        {
-            "model": "resnet50",
-            "num_batches": 100,
-            "batch_size": 32,
-            "desired_deadline": 0.1,
-            "alpha": 1.0,
-            "epochs": 2,
-            "dl_change": False
-        },
-        {
-            "model": "vgg19",
-            "num_batches": 100,
-            "batch_size": 32,
-            "desired_deadline": 0.1,
-            "alpha": 1.0,
-            "epochs": 2,
-            "dl_change": False
-        },
-        {
-            "model": "inception_v3",
-            "num_batches": 100,
-            "batch_size": 32,
-            "desired_deadline": 0.1,
-            "alpha": 1.0,
-            "epochs": 2,
-            "dl_change": False
-        }        
-    ]
-
-    launcher_sequence = job_laucher_generator()
-
-    BASELINE_MEAN = 0
+def launch_jobs(launcher_sequence):
     shell = Shell(DIRECTORY_NAME + "/baseline")
     # 1. ciclo for per calcolare le baseline 
     for i, config in enumerate(job_configs):
@@ -92,7 +107,8 @@ def launch_jobs():
                 job_configs[i]['desired_deadline'] = tot_time * 2
                 BASELINE_MEAN += tot_time
         except Exception as e:
-            print(f"Failed to launch job {job_id}. Error: {e}")    
+            print(f"Error: {e}")
+            traceback.print_exc()
     shell.scheduler_thread.join(timeout=2)
     
     BASELINE_MEAN /= 3
@@ -102,28 +118,33 @@ def launch_jobs():
     shell = Shell(DIRECTORY_NAME + "/scheduled")
     shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
     shell.scheduler_thread.start()
-    for i, config_index in enumerate(launcher_sequence):
-        if(config_index < 3):
-            try:
-                job_id = f"scheduled_job_{i}_{job_configs[config_index]['model']}_{str(uuid.uuid4().hex[:8])}"
-                run_path = os.path.join(shell.results_path, f"run_scheduled_{job_id}")
-                args = type("Args", (object,), job_configs[config_index])
 
-                job = TrainingJob(job_id, run_path, args)
-                with shell.jobs_lock:
-                    job.launch()
-                    shell.jobs.append(job)
-                    print(f"Successfully launched job {job.id} with container {job.container_name}.")
-            except Exception as e:
-                print(f"Failed to launch job {job_id}. Error: {e}")
-        time.sleep(BASELINE_MEAN/4)
+    launcher(shell, launcher_sequence, "scheduled")
+
+    while True:
+        if not shell.jobs:
+            break
+        time.sleep(10)
     shell.scheduler_thread.join(timeout=2)
 
     # 3. ciclo for per lanciare job con schedule_proportional ()
+    shell = Shell(DIRECTORY_NAME + "/proportional")
+    shell.scheduler_thread = threading.Thread(target=schedule_proportional, args=(shell,), daemon=True)
+    shell.scheduler_thread.start()
+
+    launcher(shell, launcher_sequence, "proportional")
+
+    while True:
+        if not shell.jobs:
+            break
+        time.sleep(10)
+    shell.scheduler_thread.join(timeout=2)
+
     # 4. ciclo for per lanciare job con schedule_edf ()
  
     print("Done!\n")
 
 if __name__ == "__main__":
     DIRECTORY_NAME = "esperimento"
-    launch_jobs()
+    launcher_sequence = job_laucher_generator()
+    launch_jobs(launcher_sequence)
