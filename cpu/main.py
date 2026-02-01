@@ -44,8 +44,8 @@ def get_channel_depth(model):
 def create_random_dataset(model_str, model, samples):
     channels = get_channel_depth(model)
     # This is model dependent, most models have this as a minimum size. Inception v3 has minimum size 299x299
-    height = 224
-    width = 224
+    height = 299
+    width = 299
     values = torch.rand(samples, channels, height, width)
 
     metadata = torchvision.models.get_model_weights(model_str).DEFAULT.meta
