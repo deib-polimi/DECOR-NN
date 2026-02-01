@@ -77,21 +77,21 @@ def read_progress(job):
         return -1 # Indicates not started or file not ready
 
 
-def schedule(self):
+def schedule(shell):
     """The heart of the controller. Manages CPU for all jobs."""
-    while self.scheduler_active:
+    while shell.scheduler_active:
         time.sleep(T_SAMPLE_SECONDS)
         
-        with self.jobs_lock:
-            active_jobs = [job for job in self.jobs if not job.is_done]
-            if not active_jobs:
+        with shell.jobs_lock:
+            shell.jobs = [job for job in shell.jobs if not job.is_done]
+            if not shell.jobs:
                 continue
 
             # 1. Calculate desired cores for each job
             desired_allocations = {}
             total_desired_cores = 0
             
-            for job in active_jobs:
+            for job in shell.jobs:
                 progress = read_progress(job)
 
                 if progress == -1 and job.start_time is None:
@@ -138,14 +138,12 @@ def schedule(self):
                 scaling_factor = MAX_CORES / total_desired_cores
             
             # 3. Apply the new allocations
-            for job in active_jobs:
+            for job in shell.jobs:
                 if job.id not in desired_allocations:
                     continue
                 else:
                     update(desired_allocations[job.id], scaling_factor, job)
 
-            # Clean up finished jobs from the main list
-            self.jobs = [job for job in self.jobs if not job.is_done]
 
 
 def start(model: str, num_batches: int, batch_size: int, epochs: int, 
