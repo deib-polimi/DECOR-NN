@@ -78,8 +78,8 @@ def launch_jobs(launcher_sequence):
             job = TrainingJob(job_id, run_path, args)
             job.launch()
             shell.jobs.append(job)
-            print(f"Successfully launched job {job.id} with container {job.container_name}.")
             job.start_time = time.monotonic()
+            print(f"Successfully launched job {job.id} with container {job.container_name} at {job.start_time}.")
             while(job.read_progress() < job.total_progress):
                 time.sleep(3)
                 
