@@ -121,6 +121,17 @@ def launch_jobs(launcher_sequence):
     shell.scheduler_thread.join(timeout=2)
 
     # 4. ciclo for per lanciare job con schedule_edf ()
+    shell = Shell(DIRECTORY_NAME + "/edf")
+    shell.scheduler_thread = threading.Thread(target=schedule_edf, args=(shell,), daemon=True)
+    shell.scheduler_thread.start()
+
+    launcher(shell, launcher_sequence, "edf")
+
+    while True:
+        if not shell.jobs:
+            break
+        time.sleep(10)
+    shell.scheduler_thread.join(timeout=2)
  
     print("Done!\n")
 
