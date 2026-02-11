@@ -21,8 +21,8 @@ class TrainingJob:
         self.dynamic_dl = args.dl_change
         self.dl_changed = False
         self.is_done = False
-        self.current_cores = MAX_CORES
-        self.csi_old = MAX_CORES
+        self.current_cores = 0
+        self.csi_old = 0
         self.csp = 0
         self.tot_time = 0
 
