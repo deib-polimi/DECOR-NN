@@ -30,7 +30,16 @@ job_configs = [
         "dl_change": False
     },
     {
-        "model": "vgg19",
+        "model": "resnet50",
+        "num_batches": 100,
+        "batch_size": 32,
+        "desired_deadline": 0.1,
+        "alpha": 1.0,
+        "epochs": 2,
+        "dl_change": False
+    },
+    {
+        "model": "resnet50",
         "num_batches": 100,
         "batch_size": 32,
         "desired_deadline": 0.1,
