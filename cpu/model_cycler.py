@@ -25,8 +25,8 @@ DEADLINE_FACTOR = 4
 job_configs = [
     {
         "model": "resnet50",
-        "num_batches": 100,
-        "batch_size": 32,
+        "num_batches": 10,
+        "batch_size": 10,
         "desired_deadline": 0.1,
         "alpha": 1.0,
         "epochs": 2,
@@ -34,8 +34,8 @@ job_configs = [
     },
     {
         "model": "resnet50",
-        "num_batches": 100,
-        "batch_size": 32,
+        "num_batches": 10,
+        "batch_size": 10,
         "desired_deadline": 0.1,
         "alpha": 1.0,
         "epochs": 2,
@@ -43,8 +43,8 @@ job_configs = [
     },
     {
         "model": "resnet50",
-        "num_batches": 100,
-        "batch_size": 32,
+        "num_batches": 10,
+        "batch_size": 10,
         "desired_deadline": 0.1,
         "alpha": 1.0,
         "epochs": 2,
