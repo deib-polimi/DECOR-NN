@@ -18,6 +18,9 @@ DIRECTORY_NAME = ""
 SEED = 4
 random.seed(SEED)
 
+TICK_FACTOR = 0.4
+DEADLINE_FACTOR = 4
+
 # Define the training jobs to launch
 job_configs = [
     {
@@ -69,7 +72,7 @@ def launcher(shell, launcher_sequence, name):
             except Exception as e:
                 print(f"Error: {e}")
                 traceback.print_exc()
-        time.sleep(BASELINE_MEAN * 0.25)
+        time.sleep(BASELINE_MEAN * TICK_FACTOR)
 
 def launch_jobs(launcher_sequence):
     global BASELINE_MEAN
@@ -93,7 +96,7 @@ def launch_jobs(launcher_sequence):
                 time.sleep(3)
                 
             # Aggiornare deadline di job_configs con le nuove baseline calcolate
-            job_configs[i]['desired_deadline'] = job.tot_time * 2
+            job_configs[i]['desired_deadline'] = job.tot_time * DEADLINE_FACTOR
             BASELINE_MEAN += job.tot_time
         except Exception as e:
             print(f"Error: {e}")
