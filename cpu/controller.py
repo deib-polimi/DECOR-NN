@@ -85,27 +85,26 @@ def next_allocation(progress, total_progress, set_point, job):
     return cs, csp
 
 
-def update(desired, scaling_factor, job):
-    actual_cores = desired * scaling_factor
+def update(desired, job, last_used_core):
+    """actual_cores = desired * scaling_factor
     # Round the final allocation
     job.csi_old = actual_cores - job.csp
     
     quantized_cores = round(actual_cores , QUANTUM_DIGITS)
     final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
 
-    cpu_quota = int(final_cores * CPU_PERIOD)
-
-    subprocess.run(f'docker update --cpu-quota="{cpu_quota}" {job.container_name}',
-                    shell=True, check=True, capture_output=True)
-
-    if final_cores != job.current_cores:
+    cpu_quota = int(final_cores * CPU_PERIOD)"""
+    if desired != job.current_cores:
         try: 
+            subprocess.run(f'docker update --cpus-set="{last_used_core}-{last_used_core + desired - 1}" {job.container_name}',
+                shell=True, check=True, capture_output=True)
             alloc_time = time.monotonic() - job.start_time
             with open(job.allocations_file, "a") as f:
-                f.write(f"{alloc_time},{job.current_cores}\n") #is it needed? In the .csv the prev file tells the amount of cores allocated
-                f.write(f"{alloc_time},{final_cores}\n")
+                f.write(f"{alloc_time},{job.current_cores}\n")
+                f.write(f"{alloc_time},{desired}\n")
             
-            job.current_cores = final_cores
+            job.current_cores = desired
+            return last_used_core + desired
         except subprocess.CalledProcessError as e:
             print(f"[{job.container_name}] Error updating CPU quota: {e.stderr.decode()}")
 
@@ -181,13 +180,14 @@ def schedule(shell):
 
             desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
             
+            last_used_core = STARTING_CORE
             # 3. Apply the new allocations
             for job in shell.jobs:
                 if job.id not in desired_allocations:
                     continue
                 else:
                     print(f"[{job.container_name}] {desired_allocations[job.id]:.2f} cores")
-                    update(desired_allocations[job.id], scaling_factor, job)
+                    last_used_core = update(desired_allocations[job.id], job, last_used_core)
 
 
 
@@ -203,8 +203,6 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
     try:
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
-            f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
-            f'--cpuset-cpus="{int(STARTING_CORE)}-{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)
