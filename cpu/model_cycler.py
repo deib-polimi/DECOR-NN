@@ -54,7 +54,7 @@ job_configs = [
 
 def job_laucher_generator(range_val):
     #return [random.randint(0, len(job_configs)) for _ in range(range_val)]
-    return [0,0]    
+    return [0]    
 
 def launcher(shell, launcher_sequence, name):
     global BASELINE_MEAN
@@ -79,7 +79,7 @@ def launch_jobs(launcher_sequence):
     global BASELINE_MEAN
 
     # 1. ciclo for per calcolare le baseline 
-    shell = Shell(DIRECTORY_NAME + "/baseline")
+    """shell = Shell(DIRECTORY_NAME + "/baseline")
     for i, config in enumerate(job_configs):
         shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
         shell.scheduler_thread.start()
@@ -104,7 +104,12 @@ def launch_jobs(launcher_sequence):
             traceback.print_exc()
     shell.scheduler_thread.join(timeout=2)
     
+
     BASELINE_MEAN /= len(job_configs)
+    """
+    BASELINE_MEAN = 44.0
+    for i, config_index in enumerate(launcher_sequence):
+        job_configs[config_index]['desired_deadline'] = BASELINE_MEAN * DEADLINE_FACTOR
     
     
     # 2. ciclo for per lanciare job con schedule ()
