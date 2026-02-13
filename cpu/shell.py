@@ -43,8 +43,8 @@ class Shell(cmd.Cmd):
         
         # Start scheduler
         self.scheduler_active = True
-        self.scheduler_thread = threading.Thread(target=schedule, args=(self,), daemon=True)
-        self.scheduler_thread.start()
+        #self.scheduler_thread = threading.Thread(target=schedule, args=(self,), daemon=True)
+        #self.scheduler_thread.start()
 
     def _build_docker_image(self):
         print("Building Docker image...")

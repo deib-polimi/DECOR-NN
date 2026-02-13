@@ -7,7 +7,6 @@ import multiprocessing as mp
 import time
 import threading
 import math
-from uuid import MAX
 
 # --- Constants ---
 T_SAMPLE_SECONDS = 1
@@ -42,12 +41,12 @@ def round_with_constraint(desired_allocations, scaling_factor):
     sum_rounded_up = sum(rounded_up)
     
     # If the sum already satisfies the constraint, return everything rounded up
-    if sum_rounded_up <= MAX:
+    if sum_rounded_up <= MAX_CORES:
         return {keys[i]: rounded_up[i] for i in range(n)}
     
     # Otherwise, we need to round down some values
     # Choose those with minimum loss (e.g., 5.1 instead of 5.9)
-    excess = sum_rounded_up - MAX
+    excess = sum_rounded_up - MAX_CORES
     
     # Create list of indices sorted by increasing loss
     sorted_indices = sorted(range(n), key=lambda i: losses[i])
@@ -96,8 +95,9 @@ def update(desired, job, last_used_core):
     cpu_quota = int(final_cores * CPU_PERIOD)"""
     if desired != job.current_cores:
         try: 
-            subprocess.run(f'docker update --cpus-set="{last_used_core}-{last_used_core + desired - 1}" {job.container_name}',
+            subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + desired - 1}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
+            print(f"[{job.container_name}] {desired:.2f} cores")
             alloc_time = time.monotonic() - job.start_time
             with open(job.allocations_file, "a") as f:
                 f.write(f"{alloc_time},{job.current_cores}\n")
@@ -186,7 +186,6 @@ def schedule(shell):
                 if job.id not in desired_allocations:
                     continue
                 else:
-                    print(f"[{job.container_name}] {desired_allocations[job.id]:.2f} cores")
                     last_used_core = update(desired_allocations[job.id], job, last_used_core)
 
 

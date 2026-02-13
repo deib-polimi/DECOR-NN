@@ -19,7 +19,7 @@ SEED = 4
 random.seed(SEED)
 
 TICK_FACTOR = 0.4
-DEADLINE_FACTOR = 4
+DEADLINE_FACTOR = 2
 
 # Define the training jobs to launch
 job_configs = [
@@ -53,8 +53,9 @@ job_configs = [
 ]
 
 def job_laucher_generator(range_val):
-    return [random.randint(0, len(job_configs)) for _ in range(range_val)]
-        
+    #return [random.randint(0, len(job_configs)) for _ in range(range_val)]
+    return [0,0]    
+
 def launcher(shell, launcher_sequence, name):
     global BASELINE_MEAN
     for i, config_index in enumerate(launcher_sequence):
