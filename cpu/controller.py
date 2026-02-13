@@ -93,8 +93,8 @@ def update(desired, job, last_used_core):
     final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
 
     cpu_quota = int(final_cores * CPU_PERIOD)"""
-    job.csi_old = desired - job.csp
     if desired != job.current_cores:
+        job.csi_old = desired - job.csp
         try: 
             subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + desired - 1}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
