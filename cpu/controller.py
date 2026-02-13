@@ -6,6 +6,8 @@ import math
 import multiprocessing as mp
 import time
 import threading
+import math
+from uuid import MAX
 
 # --- Constants ---
 T_SAMPLE_SECONDS = 1
@@ -22,6 +24,47 @@ STARTING_CORE = 2
 ENDING_CORE = MACHINE_CORES - 1
 MAX_CORES = ENDING_CORE - STARTING_CORE + 1
 
+def round_with_constraint(desired_allocations, scaling_factor):
+    # Extract keys and values
+    keys = list(desired_allocations.keys())
+    values = list(desired_allocations.values())
+    
+    # Apply the scaling factor
+    scaled_values = [x * scaling_factor for x in values]
+    
+    n = len(scaled_values)
+    
+    # Calculate ceiling rounding and the "loss" if we round down
+    rounded_up = [math.ceil(x) for x in scaled_values]
+    losses = [x - math.floor(x) for x in scaled_values]  # Loss when rounding down
+    
+    # Sum with all values rounded up
+    sum_rounded_up = sum(rounded_up)
+    
+    # If the sum already satisfies the constraint, return everything rounded up
+    if sum_rounded_up <= MAX:
+        return {keys[i]: rounded_up[i] for i in range(n)}
+    
+    # Otherwise, we need to round down some values
+    # Choose those with minimum loss (e.g., 5.1 instead of 5.9)
+    excess = sum_rounded_up - MAX
+    
+    # Create list of indices sorted by increasing loss
+    sorted_indices = sorted(range(n), key=lambda i: losses[i])
+    
+    result = rounded_up.copy()
+    
+    # Round down the values with minimum loss
+    for i in sorted_indices:
+        if excess <= 0:
+            break
+        # Round down this value
+        result[i] = math.floor(scaled_values[i])
+        excess -= 1  # Each change from ceil to floor reduces the sum by 1
+    
+    # Return as dictionary
+    return {keys[i]: result[i] for i in range(n)}
+
 def next_allocation(progress, total_progress, set_point, job):
     """
     Calculates the next desired CPU core allocation for a job.
@@ -32,7 +75,7 @@ def next_allocation(progress, total_progress, set_point, job):
 
     #cs = round(round(cs / CORE_QUANTUM) * CORE_QUANTUM, QUANTUM_DIGITS)
     # We round later to increase precision and avoid rounding twice
-    cs = (cs / CORE_QUANTUM) * CORE_QUANTUM
+    #cs = (cs / CORE_QUANTUM) * CORE_QUANTUM
    
     if set_point >= 1.0:
         cs = job.current_cores
@@ -135,12 +178,15 @@ def schedule(shell):
             scaling_factor = 1.0
             if total_desired_cores > MAX_CORES:
                 scaling_factor = MAX_CORES / total_desired_cores
+
+            desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
             
             # 3. Apply the new allocations
             for job in shell.jobs:
                 if job.id not in desired_allocations:
                     continue
                 else:
+                    print(f"[{job.container_name}] {desired_allocations[job.id]:.2f} cores")
                     update(desired_allocations[job.id], scaling_factor, job)
 
 
