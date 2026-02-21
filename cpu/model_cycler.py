@@ -123,7 +123,7 @@ def launch_jobs(launcher_sequence):
     shell.scheduler_thread.join(timeout=2)
 
     # 3. ciclo for per lanciare job con schedule_proportional ()
-    shell = Shell(DIRECTORY_NAME + "/proportional")
+    """shell = Shell(DIRECTORY_NAME + "/proportional")
     shell.scheduler_thread = threading.Thread(target=schedule_proportional, args=(shell,), daemon=True)
     shell.scheduler_thread.start()
 
@@ -146,9 +146,11 @@ def launch_jobs(launcher_sequence):
         if not shell.jobs:
             break
         time.sleep(10)
-    shell.scheduler_thread.join(timeout=2)
+    shell.scheduler_thread.join(timeout=2)"""
  
     print("Done!\n")
+    subprocess.run(f"zip -r {DIRECTORY_NAME}.zip {DIRECTORY_NAME}", shell=True, check=True, capture_output=True)
+    print(f"Results zipped into {DIRECTORY_NAME}.zip")
 
 if __name__ == "__main__":
     DIRECTORY_NAME = "esperimento"

@@ -84,28 +84,28 @@ def next_allocation(progress, total_progress, set_point, job):
     return cs, csp
 
 
-def update(desired, job, last_used_core):
-    """actual_cores = desired * scaling_factor
+def update(desired, job, last_used_core, scaling_factor):
+    actual_cores = desired * scaling_factor
     # Round the final allocation
     job.csi_old = actual_cores - job.csp
     
     quantized_cores = round(actual_cores , QUANTUM_DIGITS)
-    final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
+    final_cores = math.ceil(max(MIN_CORES, quantized_cores)) #critical when having N jobs where N is higher than the number of cores
 
-    cpu_quota = int(final_cores * CPU_PERIOD)"""
+    #cpu_quota = int(final_cores * CPU_PERIOD)
     if desired != job.current_cores:
-        job.csi_old = desired - job.csp
+        #job.csi_old = desired - job.csp
         try: 
-            subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + desired - 1}" {job.container_name}',
+            subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + final_cores - 1}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
-            print(f"[{job.container_name}] {desired:.2f} cores")
+            print(f"[{job.container_name}] From {last_used_core} to {last_used_core + final_cores - 1}")
             alloc_time = time.monotonic() - job.start_time
             with open(job.allocations_file, "a") as f:
                 f.write(f"{alloc_time},{job.current_cores}\n")
                 f.write(f"{alloc_time},{desired}\n")
             
-            job.current_cores = desired
-            return last_used_core + desired
+            job.current_cores = final_cores
+            return last_used_core + final_cores
         except subprocess.CalledProcessError as e:
             print(f"[{job.container_name}] Error updating CPU quota: {e.stderr.decode()}")
 
@@ -179,7 +179,7 @@ def schedule(shell):
             if total_desired_cores > MAX_CORES:
                 scaling_factor = MAX_CORES / total_desired_cores
 
-            desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
+            #desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
             
             last_used_core = STARTING_CORE
             # 3. Apply the new allocations
@@ -187,7 +187,7 @@ def schedule(shell):
                 if job.id not in desired_allocations:
                     continue
                 else:
-                    last_used_core = update(desired_allocations[job.id], job, last_used_core)
+                    last_used_core = update(desired_allocations[job.id], job, last_used_core, scaling_factor)
 
 
 
