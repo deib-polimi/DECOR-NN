@@ -79,7 +79,7 @@ def launch_jobs(launcher_sequence):
     global BASELINE_MEAN
 
     # 1. ciclo for per calcolare le baseline 
-    shell = Shell(DIRECTORY_NAME + "/baseline")
+    """shell = Shell(DIRECTORY_NAME + "/baseline")
     for i, config in enumerate(job_configs):
         shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
         shell.scheduler_thread.start()
@@ -103,11 +103,12 @@ def launch_jobs(launcher_sequence):
             traceback.print_exc()
     shell.scheduler_thread.join(timeout=2)
 
-    BASELINE_MEAN /= len(job_configs)
+    BASELINE_MEAN /= len(job_configs)"""
     
+    BASELINE_MEAN = 40
     # Aggiornare deadline di job_configs con le nuove baseline calcolate
     for config in job_configs:
-        config["desired_deadline"] = BASELINE_MEAN
+        config["desired_deadline"] = BASELINE_MEAN * DEADLINE_FACTOR
     
     # 2. ciclo for per lanciare job con schedule ()
     shell = Shell(DIRECTORY_NAME + "/scheduled")

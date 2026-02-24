@@ -72,6 +72,8 @@ def next_allocation(progress, total_progress, set_point, job):
     csi = job.csi_old + csp * (T_SAMPLE_SECONDS / TI_SECONDS)
     cs = min(max(MIN_CORES, csp + csi), MAX_CORES)
 
+    #print(f"[{job.id}] Set Point: {set_point:.2f}, Progress: {progress}/{total_progress}, Desired Cores: {cs:.2f}, CSP: {csp:.2f}, CSI: {csi:.2f}, CSI_old: {job.csi_old:.2f}")
+
     #cs = round(round(cs / CORE_QUANTUM) * CORE_QUANTUM, QUANTUM_DIGITS)
     # We round later to increase precision and avoid rounding twice
     #cs = (cs / CORE_QUANTUM) * CORE_QUANTUM
@@ -82,7 +84,6 @@ def next_allocation(progress, total_progress, set_point, job):
             return MAX_CORES, csp
 
     return cs, csp
-
 
 def update(desired, job, last_used_core, scaling_factor):
     actual_cores = desired * scaling_factor
@@ -98,7 +99,7 @@ def update(desired, job, last_used_core, scaling_factor):
         try: 
             subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + final_cores - 1}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
-            print(f"[{job.container_name}] From {last_used_core} to {last_used_core + final_cores - 1}")
+            print(f"[{job.id}] From {last_used_core} to {last_used_core + final_cores - 1}")
             alloc_time = time.monotonic() - job.start_time
             with open(job.allocations_file, "a") as f:
                 f.write(f"{alloc_time},{job.current_cores}\n")
@@ -107,8 +108,7 @@ def update(desired, job, last_used_core, scaling_factor):
             job.current_cores = final_cores
             return last_used_core + final_cores
         except subprocess.CalledProcessError as e:
-            print(f"[{job.container_name}] Error updating CPU quota: {e.stderr.decode()}")
-
+            print(f"[{job.id}] Error updating CPU quota: {e.stderr.decode()}")
 
 def read_progress(job):
     """Reads the progress from the job's progress file."""
@@ -117,7 +117,6 @@ def read_progress(job):
             return int(file.readline())
     except (ValueError, FileNotFoundError):
         return -1 # Indicates not started or file not ready
-
 
 def schedule(shell):
     """The heart of the controller. Manages CPU for all jobs."""
@@ -147,7 +146,7 @@ def schedule(shell):
                     job.is_done = True
                     end_time = time.monotonic() 
                     job.tot_time = end_time - job.start_time
-                    print(f"[{job.container_name}] Finished Training in {job.tot_time:.2f}s at {end_time:.2f}s")
+                    print(f"[{job.id}] Finished Training in {job.tot_time:.2f}s at {end_time:.2f}s")
                     with open(job.allocations_file, "a") as f:
                         f.write(f"{job.tot_time},{job.current_cores}\n")
                         f.write(f"{job.tot_time},0\n")
@@ -162,7 +161,7 @@ def schedule(shell):
                 #Dynamically change deadline
                 if job.time_units / job.deadline >= 0.3 and job.dynamic_dl and not job.dl_changed:
                     job.deadline = job.desired_deadline * 0.8
-                    print(f"[{job.container_name}] Deadline changed to {job.deadline}\n")
+                    print(f"[{job.id}] Deadline changed to {job.deadline}\n")
                     job.dl_changed = True
 
                 #Desired allocation
@@ -189,8 +188,6 @@ def schedule(shell):
                 else:
                     last_used_core = update(desired_allocations[job.id], job, last_used_core, scaling_factor)
 
-
-
 def start(model: str, num_batches: int, batch_size: int, epochs: int, 
           container_name: str, progress_file_path: str, image_name: str):
     """
@@ -203,6 +200,7 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
     try:
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
+            f'--cpuset-cpus="{int(ENDING_CORE)}-{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)
