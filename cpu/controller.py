@@ -86,16 +86,19 @@ def next_allocation(progress, total_progress, set_point, job):
     return cs, csp
 
 def update(desired, job, last_used_core, scaling_factor):
-    actual_cores = desired * scaling_factor
+
+    #actual_cores = desired * scaling_factor
     # Round the final allocation
-    job.csi_old = actual_cores - job.csp
+    #job.csi_old = actual_cores - job.csp
     
-    quantized_cores = round(actual_cores , QUANTUM_DIGITS)
-    final_cores = math.ceil(max(MIN_CORES, quantized_cores)) #critical when having N jobs where N is higher than the number of cores
+    #quantized_cores = round(actual_cores , QUANTUM_DIGITS)
+    #final_cores = math.ceil(max(MIN_CORES, desired)) #critical when having N jobs where N is higher than the number of cores
+
+    final_cores = max(MIN_CORES, desired)
 
     #cpu_quota = int(final_cores * CPU_PERIOD)
     if final_cores != job.current_cores:
-        #job.csi_old = desired - job.csp
+        job.csi_old = final_cores - job.csp
         try: 
             subprocess.run(f'docker update --cpuset-cpus="{last_used_core}-{last_used_core + final_cores - 1}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
@@ -178,8 +181,10 @@ def schedule(shell):
             if total_desired_cores > MAX_CORES:
                 scaling_factor = MAX_CORES / total_desired_cores
 
-            #desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
-            
+            start_rounding_time = time.monotonic()
+            desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
+            print(f"Rounding time: {time.monotonic() - start_rounding_time:.4f}s")
+
             last_used_core = STARTING_CORE
             # 3. Apply the new allocations
             for job in shell.jobs:
