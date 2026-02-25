@@ -112,6 +112,8 @@ def update(desired, job, last_used_core, scaling_factor):
             return last_used_core + final_cores
         except subprocess.CalledProcessError as e:
             print(f"[{job.id}] Error updating CPU quota: {e.stderr.decode()}")
+    else:
+        return last_used_core + final_cores
 
 def read_progress(job):
     """Reads the progress from the job's progress file."""
