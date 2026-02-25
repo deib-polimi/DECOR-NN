@@ -23,47 +23,6 @@ STARTING_CORE = 2
 ENDING_CORE = MACHINE_CORES - 1
 MAX_CORES = ENDING_CORE - STARTING_CORE + 1
 
-def round_with_constraint(desired_allocations, scaling_factor):
-    # Extract keys and values
-    keys = list(desired_allocations.keys())
-    values = list(desired_allocations.values())
-    
-    # Apply the scaling factor
-    scaled_values = [x * scaling_factor for x in values]
-    
-    n = len(scaled_values)
-    
-    # Calculate ceiling rounding and the "loss" if we round down
-    rounded_up = [math.ceil(x) for x in scaled_values]
-    losses = [x - math.floor(x) for x in scaled_values]  # Loss when rounding down
-    
-    # Sum with all values rounded up
-    sum_rounded_up = sum(rounded_up)
-    
-    # If the sum already satisfies the constraint, return everything rounded up
-    if sum_rounded_up <= MAX_CORES:
-        return {keys[i]: rounded_up[i] for i in range(n)}
-    
-    # Otherwise, we need to round down some values
-    # Choose those with minimum loss (e.g., 5.1 instead of 5.9)
-    excess = sum_rounded_up - MAX_CORES
-    
-    # Create list of indices sorted by increasing loss
-    sorted_indices = sorted(range(n), key=lambda i: losses[i])
-    
-    result = rounded_up.copy()
-    
-    # Round down the values with minimum loss
-    for i in sorted_indices:
-        if excess <= 0:
-            break
-        # Round down this value
-        result[i] = math.floor(scaled_values[i])
-        excess -= 1  # Each change from ceil to floor reduces the sum by 1
-    
-    # Return as dictionary
-    return {keys[i]: result[i] for i in range(n)}
-
 def next_allocation(progress, total_progress, set_point, job):
     """
     Calculates the next desired CPU core allocation for a job.
@@ -183,10 +142,6 @@ def schedule(shell):
             if total_desired_cores > MAX_CORES:
                 scaling_factor = MAX_CORES / total_desired_cores
 
-            start_rounding_time = time.monotonic()
-            desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
-            print(f"Rounding time: {time.monotonic() - start_rounding_time:.4f}s")
-
             last_used_core = STARTING_CORE
             # 3. Apply the new allocations
             for job in shell.jobs:
@@ -207,7 +162,8 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
     try:
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
-            f'--cpuset-cpus="{int(ENDING_CORE)}-{int(ENDING_CORE)}" '
+            f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
+            f'--cpuset-cpus="{int(STARTING_CORE)}-{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)

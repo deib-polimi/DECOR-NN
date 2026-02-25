@@ -20,6 +20,9 @@ random.seed(SEED)
 
 TICK_FACTOR = 0.4
 DEADLINE_FACTOR = 2
+BASELINE_MEAN = 40
+
+launcher_sequence = [0]
 
 # Define the training jobs to launch
 job_configs = [
@@ -52,10 +55,6 @@ job_configs = [
     }
 ]
 
-def job_laucher_generator(range_val):
-    #return [random.randint(0, len(job_configs)) for _ in range(range_val)]
-    return [0]    
-
 def launcher(shell, launcher_sequence, name):
     global BASELINE_MEAN
     for i, config_index in enumerate(launcher_sequence):
@@ -76,36 +75,6 @@ def launcher(shell, launcher_sequence, name):
         time.sleep(BASELINE_MEAN * TICK_FACTOR)
 
 def launch_jobs(launcher_sequence):
-    global BASELINE_MEAN
-
-    # 1. ciclo for per calcolare le baseline 
-    """shell = Shell(DIRECTORY_NAME + "/baseline")
-    for i, config in enumerate(job_configs):
-        shell.scheduler_thread = threading.Thread(target=schedule, args=(shell,), daemon=True)
-        shell.scheduler_thread.start()
-        try:
-            job_id = f"{config['model']}_{str(uuid.uuid4().hex[:8])}"
-            run_path = os.path.join(shell.results_path, f"{job_id}")
-            args = type("Args", (object,), config)
-
-            job = TrainingJob(job_id, run_path, args)
-            job.launch()
-            shell.jobs.append(job)
-            job.start_time = time.monotonic()
-            print(f"Successfully launched job {job.id} with container {job.container_name} at {job.start_time}.")
-            while(job.read_progress() < job.total_progress):
-                time.sleep(3)
-                
-            # Aggiornare deadline di job_configs con le nuove baseline calcolate
-            BASELINE_MEAN += job.tot_time
-        except Exception as e:
-            print(f"Error: {e}")
-            traceback.print_exc()
-    shell.scheduler_thread.join(timeout=2)
-
-    BASELINE_MEAN /= len(job_configs)"""
-    
-    BASELINE_MEAN = 40
     # Aggiornare deadline di job_configs con le nuove baseline calcolate
     for config in job_configs:
         config["desired_deadline"] = BASELINE_MEAN * DEADLINE_FACTOR
@@ -122,32 +91,6 @@ def launch_jobs(launcher_sequence):
             break
         time.sleep(10)
     shell.scheduler_thread.join(timeout=2)
-
-    # 3. ciclo for per lanciare job con schedule_proportional ()
-    """shell = Shell(DIRECTORY_NAME + "/proportional")
-    shell.scheduler_thread = threading.Thread(target=schedule_proportional, args=(shell,), daemon=True)
-    shell.scheduler_thread.start()
-
-    launcher(shell, launcher_sequence, "proportional")
-
-    while True:
-        if not shell.jobs:
-            break
-        time.sleep(10)
-    shell.scheduler_thread.join(timeout=2)
-
-    # 4. ciclo for per lanciare job con schedule_edf ()
-    shell = Shell(DIRECTORY_NAME + "/edf")
-    shell.scheduler_thread = threading.Thread(target=schedule_edf, args=(shell,), daemon=True)
-    shell.scheduler_thread.start()
-
-    launcher(shell, launcher_sequence, "edf")
-
-    while True:
-        if not shell.jobs:
-            break
-        time.sleep(10)
-    shell.scheduler_thread.join(timeout=2)"""
  
     print("Done!\n")
     subprocess.run(f"zip -r {DIRECTORY_NAME}.zip {DIRECTORY_NAME}", shell=True, check=True, capture_output=True)
@@ -155,5 +98,4 @@ def launch_jobs(launcher_sequence):
 
 if __name__ == "__main__":
     DIRECTORY_NAME = "esperimento"
-    launcher_sequence = job_laucher_generator(14)
     launch_jobs(launcher_sequence)
