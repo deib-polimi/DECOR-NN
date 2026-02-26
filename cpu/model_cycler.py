@@ -13,7 +13,6 @@ from controller import T_SAMPLE_SECONDS, read_progress, schedule
 import random
 from scheduler import *
 
-BASELINE_MEAN = 0.0
 DIRECTORY_NAME = ""
 SEED = 4
 random.seed(SEED)
@@ -22,28 +21,10 @@ TICK_FACTOR = 0.4
 DEADLINE_FACTOR = 2
 BASELINE_MEAN = 40
 
-launcher_sequence = [0]
+launcher_sequence = [0,0,0,1,0,0]
 
 # Define the training jobs to launch
 job_configs = [
-    {
-        "model": "resnet50",
-        "num_batches": 10,
-        "batch_size": 10,
-        "desired_deadline": 0.1,
-        "alpha": 1.0,
-        "epochs": 2,
-        "dl_change": False
-    },
-    {
-        "model": "resnet50",
-        "num_batches": 10,
-        "batch_size": 10,
-        "desired_deadline": 0.1,
-        "alpha": 1.0,
-        "epochs": 2,
-        "dl_change": False
-    },
     {
         "model": "resnet50",
         "num_batches": 10,
@@ -91,11 +72,36 @@ def launch_jobs(launcher_sequence):
             break
         time.sleep(10)
     shell.scheduler_thread.join(timeout=2)
+
+    # 3. ciclo for per lanciare job con schedule_proportional ()
+    shell = Shell(DIRECTORY_NAME + "/proportional")
+    shell.scheduler_thread = threading.Thread(target=schedule_proportional, args=(shell,), daemon=True)
+    shell.scheduler_thread.start()
+
+    launcher(shell, launcher_sequence, "proportional")
+
+    while True:
+        if not shell.jobs:
+            break
+        time.sleep(10)
+    shell.scheduler_thread.join(timeout=2)
+
+    # 4. ciclo for per lanciare job con schedule_edf ()
+    shell = Shell(DIRECTORY_NAME + "/edf")
+    shell.scheduler_thread = threading.Thread(target=schedule_edf, args=(shell,), daemon=True)
+    shell.scheduler_thread.start()
+
+    launcher(shell, launcher_sequence, "edf")
+
+    while True:
+        if not shell.jobs:
+            break
+        time.sleep(10)
+    shell.scheduler_thread.join(timeout=2)
  
     print("Done!\n")
     subprocess.run(f"zip -r {DIRECTORY_NAME}.zip {DIRECTORY_NAME}", shell=True, check=True, capture_output=True)
     print(f"Results zipped into {DIRECTORY_NAME}.zip")
 
 if __name__ == "__main__":
-    DIRECTORY_NAME = "esperimento"
     launch_jobs(launcher_sequence)
