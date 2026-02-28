@@ -28,7 +28,7 @@ job_configs = [
     {
         "model": "resnet50",
         "num_batches": 10,
-        "batch_size": 10,
+        "batch_size": 2,
         "desired_deadline": 0.1,
         "alpha": 1.0,
         "epochs": 2,
@@ -101,7 +101,7 @@ def launch_jobs(launcher_sequence):
  
     print("Done!\n")
     subprocess.run(f"zip -r {DIRECTORY_NAME}.zip {DIRECTORY_NAME}", shell=True, check=True, capture_output=True)
-    print(f"Results zipped into {DIRECTORY_NAME}.zip")
+    print(f"Results zipped into {os.path.join(os.getcwd(), DIRECTORY_NAME)}.zip")
 
 if __name__ == "__main__":
     launch_jobs(launcher_sequence)
