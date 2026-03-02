@@ -103,7 +103,7 @@ def update(desired, job, last_used_core, scaling_factor):
             shell=True, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         print(f"[{job.id}] Error updating CPU quota: {e.stderr.decode()}")
-        
+
     if final_cores != job.current_cores:
         print(f"[{job.id}] From {last_used_core} to {last_used_core + final_cores - 1}")
         alloc_time = time.monotonic() - job.start_time
@@ -205,7 +205,7 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
             f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
-            f'--cpuset-cpus="{int(ENDING_CORE)}" '
+            f'--cpuset-cpus="{int(STARTING_CORE)}-{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)
