@@ -207,7 +207,8 @@ def start(model: str, num_batches: int, batch_size: int, epochs: int,
     try:
         docker_command = (
             f'docker run -d -v {progress_dir}:/project/results --name={container_name} '
-            f'--cpuset-cpus="{int(ENDING_CORE)}-{int(ENDING_CORE)}" '
+            f'--cpu-period=100000 --cpu-quota={int(MAX_CORES * 100000)} '
+            f'--cpuset-cpus="{int(ENDING_CORE)}" '
             f'{image_name} {model} {str(num_batches)} {str(epochs)} {str(batch_size)} {progress_filename}'
         )
         subprocess.run(docker_command, shell=True, check=True, capture_output=True)
