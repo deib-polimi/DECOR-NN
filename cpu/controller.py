@@ -95,7 +95,7 @@ def update(desired, job, last_used_core, scaling_factor):
     #final_cores = math.ceil(max(MIN_CORES, desired)) #critical when having N jobs where N is higher than the number of cores
 
     final_cores = max(MIN_CORES, desired)
-    job.csi_old = final_cores - job.csp
+    #job.csi_old = final_cores - job.csp
 
     #cpu_quota = int(final_cores * CPU_PERIOD)
     try: 
@@ -182,15 +182,16 @@ def schedule(shell):
             if total_desired_cores > MAX_CORES:
                 scaling_factor = MAX_CORES / total_desired_cores
 
-            desired_allocations = round_with_constraint(desired_allocations, scaling_factor)
+            rounded_desired = round_with_constraint(desired_allocations, scaling_factor)
 
             last_used_core = STARTING_CORE
             # 3. Apply the new allocations
             for job in shell.jobs:
-                if job.id not in desired_allocations:
+                if job.id not in rounded_desired:
                     continue
                 else:
-                    last_used_core = update(desired_allocations[job.id], job, last_used_core, scaling_factor)
+                    last_used_core = update(rounded_desired[job.id], job, last_used_core, scaling_factor)
+                    job.csi_old = (desired_allocations[job.id] * scaling_factor) - job.csp
 
 def start(model: str, num_batches: int, batch_size: int, epochs: int, 
           container_name: str, progress_file_path: str, image_name: str):
