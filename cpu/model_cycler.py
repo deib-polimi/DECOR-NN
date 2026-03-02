@@ -13,34 +13,17 @@ from controller import T_SAMPLE_SECONDS, read_progress, schedule
 import random
 from scheduler import *
 
-BASELINE_MEAN = 0.0
-DIRECTORY_NAME = ""
 SEED = 4
 random.seed(SEED)
 
+DIRECTORY_NAME = "esperimento"
+BASELINE_MEAN = 40
+launcher_sequence = [0]
 TICK_FACTOR = 0.4
 DEADLINE_FACTOR = 2
 
 # Define the training jobs to launch
 job_configs = [
-    {
-        "model": "resnet50",
-        "num_batches": 10,
-        "batch_size": 10,
-        "desired_deadline": 0.1,
-        "alpha": 1.0,
-        "epochs": 2,
-        "dl_change": False
-    },
-    {
-        "model": "resnet50",
-        "num_batches": 10,
-        "batch_size": 10,
-        "desired_deadline": 0.1,
-        "alpha": 1.0,
-        "epochs": 2,
-        "dl_change": False
-    },
     {
         "model": "resnet50",
         "num_batches": 10,
@@ -104,8 +87,7 @@ def launch_jobs(launcher_sequence):
     shell.scheduler_thread.join(timeout=2)
 
     BASELINE_MEAN /= len(job_configs)"""
-    
-    BASELINE_MEAN = 40
+
     # Aggiornare deadline di job_configs con le nuove baseline calcolate
     for config in job_configs:
         config["desired_deadline"] = BASELINE_MEAN * DEADLINE_FACTOR
@@ -154,6 +136,6 @@ def launch_jobs(launcher_sequence):
     print(f"Results zipped into {DIRECTORY_NAME}.zip")
 
 if __name__ == "__main__":
-    DIRECTORY_NAME = "esperimento"
-    launcher_sequence = job_laucher_generator(14)
+    #DIRECTORY_NAME = "esperimento"
+    #launcher_sequence = job_laucher_generator(14)
     launch_jobs(launcher_sequence)
