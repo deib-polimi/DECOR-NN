@@ -45,19 +45,13 @@ def next_allocation(progress, total_progress, set_point, job):
     return cs, csp
 
 def update(desired, job, scaling_factor):
-    actual_cores = desired * scaling_factor
-    # Round the final allocation
-    job.csi_old = actual_cores - job.csp
-    
+    actual_cores = desired * scaling_factor  
     quantized_cores = round(actual_cores , QUANTUM_DIGITS)
     final_cores = max(MIN_CORES, quantized_cores) #critical when having N jobs where N is higher than the number of cores
-    #final_cores = math.ceil(max(MIN_CORES, quantized_cores))
-
     cpu_quota = int(final_cores * CPU_PERIOD)
+    job.csi_old = final_cores - job.csp
 
-    #cpu_quota = int(final_cores * CPU_PERIOD)
     if final_cores != job.current_cores:
-        job.csi_old = final_cores - job.csp
         try: 
             subprocess.run(f'docker update --cpu-quota="{cpu_quota}" {job.container_name}',
                 shell=True, check=True, capture_output=True)
@@ -137,7 +131,20 @@ def schedule(shell):
             # 2. Calculate proportional allocation
             scaling_factor = 1.0
             if total_desired_cores > MAX_CORES:
-                scaling_factor = MAX_CORES / total_desired_cores
+                #scaling_factor = MAX_CORES / total_desired_cores
+                active_jobs = [job for job in shell.jobs if job.start_time is not None]
+                num_active_jobs = len(active_jobs)
+                earliest_job = min(
+                    active_jobs,
+                    key=lambda j: j.start_time + j.desired_deadline
+                )
+                cores_given_to_others = MIN_CORES * (num_active_jobs - 1)
+                cores_for_earliest = max(MIN_CORES, MAX_CORES - cores_given_to_others)
+                desired_allocations[earliest_job.id] = cores_for_earliest
+                for job in shell.jobs:
+                    if job != earliest_job:
+                        desired_allocations[job.id] = MIN_CORES
+
 
             # 3. Apply the new allocations
             for job in shell.jobs:
